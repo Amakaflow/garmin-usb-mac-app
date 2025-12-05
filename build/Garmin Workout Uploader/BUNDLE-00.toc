@@ -1,0 +1,3 @@
+([('Garmin Workout Uploader',
+   '/Users/davidandrews/dev/garmin-usb-app/dist/Garmin Workout Uploader',
+   'EXECUTABLE')],)
