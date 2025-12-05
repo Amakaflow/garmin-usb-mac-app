@@ -1,6 +1,9 @@
 # Drag and drop support (optional but recommended)
 tkinterdnd2>=0.3.0
 
+# FIT file parsing for workout preview (optional but recommended)
+fitparse>=1.2.0
+
 # Tkinter comes bundled with Python on macOS
 
 # For building standalone app (optional):
