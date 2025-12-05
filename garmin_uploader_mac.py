@@ -13,6 +13,15 @@ from pathlib import Path
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
 
+# Try to import tkinterdnd2 for drag and drop support
+try:
+    from tkinterdnd2 import DND_FILES, TkinterDnD
+    DND_AVAILABLE = True
+except ImportError:
+    DND_AVAILABLE = False
+    print("Note: Install tkinterdnd2 for drag & drop support: pip install tkinterdnd2")
+
+
 class GarminUploaderMac:
     def __init__(self, root):
         self.root = root
@@ -38,6 +47,9 @@ class GarminUploaderMac:
         
         self.selected_files = []
         self.openmtp_installed = self.check_openmtp()
+        
+        # Track drag state for visual feedback
+        self.is_dragging = False
         
         self.create_ui()
     
@@ -103,19 +115,31 @@ class GarminUploaderMac:
         content_func(content_frame)
     
     def create_file_selector(self, parent):
-        """Step 1: File selection"""
-        # Listbox
-        list_frame = Frame(parent, bg='#fff')
-        list_frame.pack(fill=X)
+        """Step 1: File selection with drag and drop support"""
+        # Drop zone frame (for visual feedback)
+        self.drop_zone = Frame(parent, bg='#fff')
+        self.drop_zone.pack(fill=X)
         
-        self.file_listbox = Listbox(list_frame, height=4, font=('SF Pro Text', 11),
+        # Listbox
+        self.file_listbox = Listbox(self.drop_zone, height=4, font=('SF Pro Text', 11),
                                      selectbackground='#007AFF', activestyle='none',
-                                     highlightthickness=1, highlightbackground='#e0e0e0',
-                                     relief=FLAT)
+                                     highlightthickness=2, highlightbackground='#e0e0e0',
+                                     highlightcolor='#007AFF', relief=FLAT)
         self.file_listbox.pack(fill=X, pady=(0, 8))
         
-        # Placeholder text
-        self.file_listbox.insert(END, "  No files selected - click 'Add Files' below")
+        # Set up drag and drop if available
+        if DND_AVAILABLE:
+            self.file_listbox.drop_target_register(DND_FILES)
+            self.file_listbox.dnd_bind('<<DropEnter>>', self.on_drag_enter)
+            self.file_listbox.dnd_bind('<<DropLeave>>', self.on_drag_leave)
+            self.file_listbox.dnd_bind('<<Drop>>', self.on_drop)
+            
+            # Placeholder text with drag hint
+            self.file_listbox.insert(END, "  Drop .FIT files here or click 'Add Files'")
+        else:
+            # Placeholder text without drag hint
+            self.file_listbox.insert(END, "  No files selected - click 'Add Files' below")
+        
         self.file_listbox.config(fg='#999')
         
         # Buttons
@@ -133,6 +157,101 @@ class GarminUploaderMac:
         
         self.file_count = Label(btn_frame, text="", font=('SF Pro Text', 11), bg='#fff', fg='#666')
         self.file_count.pack(side=RIGHT)
+        
+        # Drag and drop status indicator
+        if DND_AVAILABLE:
+            self.dnd_status = Label(btn_frame, text="📥 Drop enabled", font=('SF Pro Text', 10), 
+                                    bg='#fff', fg='#34C759')
+            self.dnd_status.pack(side=RIGHT, padx=(0, 10))
+    
+    def on_drag_enter(self, event):
+        """Visual feedback when files are dragged over the listbox"""
+        self.is_dragging = True
+        self.file_listbox.config(highlightbackground='#007AFF', highlightthickness=3)
+        self.drop_zone.config(bg='#e3f2fd')
+        return event.action
+    
+    def on_drag_leave(self, event):
+        """Reset visual feedback when drag leaves"""
+        self.is_dragging = False
+        self.file_listbox.config(highlightbackground='#e0e0e0', highlightthickness=2)
+        self.drop_zone.config(bg='#fff')
+        return event.action
+    
+    def on_drop(self, event):
+        """Handle dropped files"""
+        self.is_dragging = False
+        self.file_listbox.config(highlightbackground='#e0e0e0', highlightthickness=2)
+        self.drop_zone.config(bg='#fff')
+        
+        # Parse dropped file paths
+        # On macOS, paths may be space-separated or in braces
+        files = self.parse_drop_data(event.data)
+        
+        if not files:
+            return
+        
+        # Add the files
+        self.add_files_to_list(files)
+    
+    def parse_drop_data(self, data):
+        """Parse the dropped file data from tkinterdnd2"""
+        files = []
+        
+        # Handle different formats
+        # Format 1: {/path/to/file1} {/path/to/file2}
+        # Format 2: /path/to/file1 /path/to/file2
+        
+        if '{' in data:
+            # Files are wrapped in braces (common on macOS)
+            import re
+            matches = re.findall(r'\{([^}]+)\}', data)
+            files = matches
+        else:
+            # Try to split by spaces, but handle spaces in filenames
+            # This is tricky - assume each path starts with /
+            parts = data.split()
+            current_path = ""
+            for part in parts:
+                if part.startswith('/') and current_path:
+                    files.append(current_path)
+                    current_path = part
+                elif part.startswith('/'):
+                    current_path = part
+                else:
+                    current_path += ' ' + part
+            if current_path:
+                files.append(current_path)
+        
+        # Filter to only .fit files
+        fit_files = [f for f in files if f.lower().endswith('.fit')]
+        
+        return fit_files
+    
+    def add_files_to_list(self, files):
+        """Add files to the selection list"""
+        if not files:
+            return
+        
+        # Clear placeholder if this is the first file
+        if not self.selected_files:
+            self.file_listbox.delete(0, END)
+            self.file_listbox.config(fg='black')
+        
+        added_count = 0
+        for f in files:
+            if f not in self.selected_files:
+                if f.lower().endswith('.fit'):
+                    self.selected_files.append(f)
+                    name = os.path.basename(f)
+                    self.file_listbox.insert(END, f"  📄 {name}")
+                    added_count += 1
+        
+        if added_count > 0:
+            self.update_ui_state()
+            # Flash success feedback
+            self.file_listbox.config(highlightbackground='#34C759')
+            self.root.after(300, lambda: self.file_listbox.config(highlightbackground='#e0e0e0'))
     
     def create_prepare_section(self, parent):
         """Step 2: Prepare transfer"""
@@ -175,29 +294,19 @@ class GarminUploaderMac:
             filetypes=[("FIT files", "*.fit *.FIT"), ("All files", "*.*")]
         )
         
-        if not files:
-            return
-        
-        # Clear placeholder if present
-        if not self.selected_files:
-            self.file_listbox.delete(0, END)
-            self.file_listbox.config(fg='black')
-        
-        for f in files:
-            if f not in self.selected_files:
-                # Only accept .fit files
-                if f.lower().endswith('.fit'):
-                    self.selected_files.append(f)
-                    name = os.path.basename(f)
-                    self.file_listbox.insert(END, f"  📄 {name}")
-        
-        self.update_ui_state()
+        if files:
+            self.add_files_to_list(list(files))
     
     def clear_files(self):
         """Clear all selected files"""
         self.selected_files = []
         self.file_listbox.delete(0, END)
-        self.file_listbox.insert(END, "  No files selected - click 'Add Files' below")
+        
+        if DND_AVAILABLE:
+            self.file_listbox.insert(END, "  Drop .FIT files here or click 'Add Files'")
+        else:
+            self.file_listbox.insert(END, "  No files selected - click 'Add Files' below")
+        
         self.file_listbox.config(fg='#999')
         self.update_ui_state()
     
@@ -206,7 +315,7 @@ class GarminUploaderMac:
         count = len(self.selected_files)
         
         if count > 0:
-            self.file_count.config(text=f"{count} file{'s' if count != 1 else ''}")
+            self.file_count.config(text=f"{count} file{'s' if count > 1 else ''} selected")
             self.prepare_btn.config(state=NORMAL)
         else:
             self.file_count.config(text="")
@@ -400,7 +509,19 @@ You still need to drag them to OpenMTP."""
 
 
 def main():
-    root = Tk()
+    # Use TkinterDnD if available, otherwise fall back to regular Tk
+    global DND_AVAILABLE
+    root = None
+    
+    if DND_AVAILABLE:
+        try:
+            root = TkinterDnD.Tk()
+        except RuntimeError as e:
+            print(f"Note: Drag & drop unavailable ({e})")
+            DND_AVAILABLE = False
+            root = Tk()
+    else:
+        root = Tk()
     
     # Center on screen
     root.update_idletasks()

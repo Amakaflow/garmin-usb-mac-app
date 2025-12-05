@@ -1,0 +1,7 @@
+# Drag and drop support (optional but recommended)
+tkinterdnd2>=0.3.0
+
+# Tkinter comes bundled with Python on macOS
+
+# For building standalone app (optional):
+# pyinstaller>=5.0
