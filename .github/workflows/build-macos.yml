@@ -80,16 +80,23 @@ jobs:
         body: |
           ## Garmin Workout Uploader v${{ steps.get_version.outputs.VERSION }} - macOS
 
-          ### macOS Installer
-          Download `GarminWorkoutUploader-${{ steps.get_version.outputs.VERSION }}.dmg` and drag the app to your Applications folder.
+          ### macOS Installation
+          1. Download `GarminWorkoutUploader-${{ steps.get_version.outputs.VERSION }}.dmg`
+          2. Open the DMG and drag the app to your Applications folder
+          3. **Important**: To bypass Gatekeeper (required for unsigned apps):
+             - Right-click on the app in Applications
+             - Select "Open" from the menu
+             - Click "Open" in the dialog
+             - See [full installation instructions](https://github.com/supergeri/garmin-usb-mac-app/blob/main/INSTALLATION.md#bypass-gatekeeper-required-for-unsigned-apps) for more options
 
           ### Features
           - Upload FIT workout files to Garmin watches
           - Full workout preview with exercise details
           - Auto-detection of Garmin devices via USB
           - Support for both NewFiles and Workouts folders
+          - Auto-update notifications
 
-          ### Auto-Update
-          The app will automatically check for updates on startup.
+          ### Why the Gatekeeper warning?
+          This app is not code-signed (Apple Developer cert costs $99/year). The app is open-source and safe to use.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
