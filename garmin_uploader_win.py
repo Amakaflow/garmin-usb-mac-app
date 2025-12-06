@@ -921,29 +921,68 @@ class GarminUploaderWin:
                     pass
 
             if count:
-                # Try to open Garmin Workouts folder in File Explorer
-                device_name = self.mtp_device_name.replace(" - ", "_").replace(" ", "_")
-
-                # Open staging folder
+                # Open staging folder first
                 subprocess.Popen(['explorer', str(self.staging_folder)])
                 time.sleep(0.3)
 
-                # Try to open Garmin device in explorer
-                # Use shell: protocol to open portable devices
-                try:
-                    subprocess.Popen(['explorer', f'shell::{{20D04FE0-3AEA-1069-A2D8-08002B30309D}}'])
-                except:
-                    pass
+                # Try to open Garmin Workouts folder directly using COM
+                workouts_opened = False
+                if WIN32COM_AVAILABLE:
+                    try:
+                        shell = win32com.client.Dispatch("Shell.Application")
+                        this_pc = shell.Namespace(17)
+
+                        # Find Garmin device
+                        for item in this_pc.Items():
+                            if self.mtp_device_name and self.mtp_device_name.lower() in item.Name.lower():
+                                device_folder = item.GetFolder
+
+                                # Navigate to Internal Storage
+                                storage_folder = device_folder
+                                for storage_item in device_folder.Items():
+                                    if 'storage' in storage_item.Name.lower():
+                                        storage_folder = storage_item.GetFolder
+                                        break
+
+                                # Navigate to GARMIN
+                                for garmin_item in storage_folder.Items():
+                                    if garmin_item.Name.upper() == "GARMIN":
+                                        garmin_folder = garmin_item.GetFolder
+
+                                        # Navigate to Workouts
+                                        for workout_item in garmin_folder.Items():
+                                            if workout_item.Name.upper() == "WORKOUTS":
+                                                # Open the Workouts folder
+                                                workout_path = workout_item.Path
+                                                subprocess.Popen(['explorer', workout_path])
+                                                workouts_opened = True
+                                                break
+                                        break
+                                break
+                    except Exception as e:
+                        print(f"Error opening Workouts folder: {e}")
+
+                if not workouts_opened:
+                    # Fallback: open This PC
+                    subprocess.Popen(['explorer', 'shell::{{20D04FE0-3AEA-1069-A2D8-08002B30309D}}'])
 
                 self.transfer_btn.config(text="✓ Files Ready!", bg='#FF9500', state=DISABLED)
-                self.transfer_status.config(text=f"✓ {count} file(s) ready. Drag from left window to Garmin Workouts folder.", fg='#FF9500')
-                messagebox.showinfo("Manual Transfer",
-                    f"✓ {count} file(s) are ready!\n\n"
-                    f"Two File Explorer windows have opened:\n\n"
-                    f"1. Left: Your workout files\n"
-                    f"2. Right: This PC\n\n"
-                    f"Navigate to: {self.mtp_device_name} → Internal Storage → GARMIN → Workouts\n\n"
-                    f"Then drag the files from left to right.")
+                self.transfer_status.config(text=f"✓ {count} file(s) ready. Drag from left window to right window.", fg='#FF9500')
+
+                msg = f"✓ {count} file(s) are ready!\n\n"
+                if workouts_opened:
+                    msg += "Two File Explorer windows have opened:\n\n"
+                    msg += "1. Left: Your workout files\n"
+                    msg += "2. Right: Garmin Workouts folder\n\n"
+                    msg += "Drag the files from left to right."
+                else:
+                    msg += "Two File Explorer windows have opened:\n\n"
+                    msg += "1. Left: Your workout files\n"
+                    msg += "2. Right: This PC\n\n"
+                    msg += f"Navigate to: {self.mtp_device_name} → Internal Storage → GARMIN → Workouts\n\n"
+                    msg += "Then drag the files from left to right."
+
+                messagebox.showinfo("Manual Transfer", msg)
         else:
             # Fallback - stage files for manual drag and drop
             for f in self.staging_folder.glob('*.fit'):
