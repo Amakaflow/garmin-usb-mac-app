@@ -95,6 +95,8 @@ class GarminUploaderMac:
         self.close_ge_btn = None
         self.refresh_btn = None
         self._monitor_running = True
+        self.transfer_btns_frame = None
+        self.openmtp_warning_frame = None
         
         # Handle window close
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -759,81 +761,63 @@ class GarminUploaderMac:
         if not staged:
             return
         
-        # Update Step 3 with transfer instructions
+        # Update Step 3 with transfer instructions (keep device status)
         self.show_transfer_instructions(staged)
         
-        # Open OpenMTP and staging folder
-        self.open_openmtp()
+        # Open staging folder and OpenMTP
         subprocess.run(['open', str(self.staging_folder)])
+        self.open_openmtp()
         
         # Show success
         self.prepare_btn.config(text="✓ Files Staged!", bg='#666', state=DISABLED)
     
+    
     def show_transfer_instructions(self, staged_files):
-        """Show detailed transfer instructions in Step 3"""
-        # Clear current content
-        for widget in self.transfer_frame.winfo_children():
-            widget.destroy()
+        """Show transfer instructions in Step 3 while keeping device status"""
+        # Only clear transfer_status label, not device status
+        if hasattr(self, 'transfer_status'):
+            self.transfer_status.config(
+                text=f"✓ {len(staged_files)} file(s) ready! Drag from Finder → OpenMTP (GARMIN/NewFiles)",
+                fg='#2e7d32'
+            )
         
-        # Success message
-        success_frame = Frame(self.transfer_frame, bg='#e8f5e9', padx=10, pady=8)
-        success_frame.pack(fill=X, pady=(0, 10))
+        # Clean up existing buttons frame
+        if hasattr(self, 'transfer_btns_frame') and self.transfer_btns_frame:
+            try:
+                self.transfer_btns_frame.destroy()
+            except:
+                pass
         
-        Label(success_frame, text=f"✓ {len(staged_files)} file(s) ready to transfer!", 
-              font=('SF Pro Text', 12, 'bold'), bg='#e8f5e9', fg='#2e7d32').pack()
+        # Clean up existing warning frame
+        if hasattr(self, 'openmtp_warning_frame') and self.openmtp_warning_frame:
+            try:
+                self.openmtp_warning_frame.destroy()
+            except:
+                pass
         
-        # Instructions with visual
-        instr = Frame(self.transfer_frame, bg='#fff')
-        instr.pack(fill=X)
+        # Add helper buttons below transfer_status
+        self.transfer_btns_frame = Frame(self.transfer_frame, bg='#fff')
+        self.transfer_btns_frame.pack(fill=X, pady=(8, 0))
         
-        # Visual diagram
-        diagram = """
-┌─────────────────────┐         ┌─────────────────────┐
-│   📁 GarminWorkouts │   ───►  │  📁 GARMIN          │
-│   (Finder window)   │  DRAG   │     └─ 📁 NewFiles  │
-│                     │         │        (in OpenMTP) │
-└─────────────────────┘         └─────────────────────┘
-"""
-        
-        Label(instr, text="Drag your files:", font=('SF Pro Text', 11, 'bold'), 
-              bg='#fff', anchor='w').pack(fill=X)
-        
-        Label(instr, text=diagram, font=('Menlo', 10), bg='#f8f8f8', 
-              justify=LEFT, padx=10, pady=5).pack(fill=X, pady=5)
-        
-        steps = """1. A Finder window opened with your workout files
-2. OpenMTP should show your Garmin watch
-3. In OpenMTP: Navigate to GARMIN → NewFiles
-4. Drag all .fit files from Finder into NewFiles
-5. Wait for transfer to complete
-6. Disconnect watch - done! 🎉"""
-        
-        Label(instr, text=steps, font=('SF Pro Text', 11), bg='#fff',
-              justify=LEFT, anchor='w').pack(fill=X, pady=(5, 0))
-        
-        # Buttons
-        btn_frame = Frame(self.transfer_frame, bg='#fff')
-        btn_frame.pack(fill=X, pady=(12, 0))
-        
-        Button(btn_frame, text="📂 Open Folder Again", font=('SF Pro Text', 11),
+        Button(self.transfer_btns_frame, text="📂 Open Folder", font=('SF Pro Text', 11),
                command=lambda: subprocess.run(['open', str(self.staging_folder)]),
-               padx=10, pady=5, relief=FLAT).pack(side=LEFT)
+               padx=10, pady=5, relief=FLAT, cursor='hand2').pack(side=LEFT)
         
-        Button(btn_frame, text="🔄 Open OpenMTP", font=('SF Pro Text', 11),
-               command=self.open_openmtp, padx=10, pady=5, relief=FLAT).pack(side=LEFT, padx=(8, 0))
+        Button(self.transfer_btns_frame, text="🔄 OpenMTP", font=('SF Pro Text', 11),
+               command=self.open_openmtp, padx=10, pady=5, relief=FLAT, cursor='hand2').pack(side=LEFT, padx=(8, 0))
         
         # If OpenMTP not installed
         if not self.openmtp_installed:
-            warning = Frame(self.transfer_frame, bg='#fff3e0', padx=10, pady=8)
-            warning.pack(fill=X, pady=(10, 0))
+            self.openmtp_warning_frame = Frame(self.transfer_frame, bg='#fff3e0', padx=10, pady=8)
+            self.openmtp_warning_frame.pack(fill=X, pady=(10, 0))
             
-            Label(warning, text="⚠️ OpenMTP not found!", 
+            Label(self.openmtp_warning_frame, text="⚠️ OpenMTP not found!", 
                   font=('SF Pro Text', 11, 'bold'), bg='#fff3e0', fg='#e65100').pack()
             
-            Label(warning, text="Download it free from: openmtp.ganeshrvel.com", 
+            Label(self.openmtp_warning_frame, text="Download it free from: openmtp.ganeshrvel.com", 
                   font=('SF Pro Text', 11), bg='#fff3e0').pack()
             
-            Button(warning, text="Download OpenMTP", font=('SF Pro Text', 11),
+            Button(self.openmtp_warning_frame, text="Download OpenMTP", font=('SF Pro Text', 11),
                    command=lambda: webbrowser.open('https://openmtp.ganeshrvel.com'),
                    bg='#ff9800', fg='white', padx=10, pady=5, relief=FLAT,
                    cursor='hand2').pack(pady=(5, 0))
