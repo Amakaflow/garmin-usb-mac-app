@@ -47,8 +47,9 @@ jobs:
       run: |
         pyinstaller --name "Garmin Workout Uploader" \
           --windowed \
-          --onefile \
+          --onedir \
           --add-data "version.py:." \
+          --clean \
           garmin_uploader_mac.py
 
     - name: Create DMG
