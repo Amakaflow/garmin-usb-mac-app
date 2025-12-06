@@ -193,10 +193,32 @@ class GarminUploaderWin:
             copied = 0
             for filepath in files:
                 try:
-                    # CopyHere flags: 4 = no progress dialog, 16 = yes to all
-                    target_folder.CopyHere(filepath, 4 | 16)
+                    filename = os.path.basename(filepath)
+
+                    # Check if file already exists
+                    file_exists = False
+                    for item in target_folder.Items():
+                        if item.Name == filename:
+                            file_exists = True
+                            break
+
+                    # CopyHere with no flags to show progress (blocking)
+                    # This ensures the copy completes before continuing
+                    target_folder.CopyHere(filepath, 0)
+
+                    # Wait and verify file appeared
+                    max_wait = 10  # seconds
+                    for i in range(max_wait * 2):
+                        time.sleep(0.5)
+                        found = False
+                        for item in target_folder.Items():
+                            if item.Name == filename:
+                                found = True
+                                break
+                        if found and not file_exists:
+                            break
+
                     copied += 1
-                    time.sleep(0.5)  # Give MTP time between files
                 except Exception as e:
                     print(f"Error copying {filepath}: {e}")
                     continue
