@@ -10,6 +10,9 @@ import shutil
 import subprocess
 import webbrowser
 import struct
+import re
+import threading
+import time
 from pathlib import Path
 from tkinter import *
 from tkinter import ttk, filedialog, messagebox
@@ -27,6 +30,9 @@ try:
     FITPARSE_AVAILABLE = True
 except ImportError:
     FITPARSE_AVAILABLE = False
+
+# Garmin USB Vendor ID
+GARMIN_VENDOR_ID = "0x091e"
 
 
 # Garmin exercise name mapping (from FIT SDK)
@@ -59,7 +65,7 @@ class GarminUploaderMac:
     def __init__(self, root):
         self.root = root
         self.root.title("Garmin Workout Uploader")
-        self.root.geometry("580x620")
+        self.root.geometry("580x820")
         self.root.resizable(False, False)
         
         # Styling
@@ -80,12 +86,26 @@ class GarminUploaderMac:
         
         self.selected_files = []
         self.openmtp_installed = self.check_openmtp()
+        self.libmtp_installed = self.check_libmtp()
         
         # Track drag state for visual feedback
         self.is_dragging = False
         
+        # UI elements initialized later
+        self.close_ge_btn = None
+        self.refresh_btn = None
+        self._monitor_running = True
+        
+        # Handle window close
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        
         self.create_menu()
         self.create_ui()
+    
+    def _on_close(self):
+        """Handle window close"""
+        self._monitor_running = False
+        self.root.destroy()
     
     def check_openmtp(self):
         """Check if OpenMTP is installed"""
@@ -94,6 +114,258 @@ class GarminUploaderMac:
             self.home / "Applications/OpenMTP.app"
         ]
         return any(p.exists() for p in paths)
+    
+    def check_libmtp(self):
+        """Check if libmtp is installed via Homebrew"""
+        try:
+            result = subprocess.run(['which', 'mtp-detect'], 
+                                   capture_output=True, text=True, timeout=5)
+            return result.returncode == 0
+        except:
+            return False
+    
+    def detect_garmin_device(self):
+        """Detect connected Garmin device via USB"""
+        # Try system_profiler first
+        device = self._detect_via_system_profiler()
+        if device:
+            return device
+        
+        # Fallback to ioreg for MTP devices
+        device = self._detect_via_ioreg()
+        if device:
+            return device
+        
+        return None
+    
+    def _detect_via_system_profiler(self):
+        """Detect Garmin via system_profiler"""
+        try:
+            result = subprocess.run(
+                ['system_profiler', 'SPUSBDataType'],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode != 0:
+                return None
+            
+            output = result.stdout
+            output_lower = output.lower()
+            
+            # Look for Garmin device patterns
+            garmin_patterns = [
+                'garmin', 'forerunner', 'fenix', 'edge', 'vivoactive', 
+                'venu', 'instinct', 'marq', 'enduro', 'epix', 'approach'
+            ]
+            
+            # Check if any Garmin-related text exists
+            found = any(p in output_lower for p in garmin_patterns)
+            
+            # Also check vendor ID (0x091e)
+            if not found:
+                found = 'vendor id: 0x091e' in output_lower or '091e' in output_lower
+            
+            if not found:
+                return None
+            
+            # Try to extract device name
+            lines = output.split('\n')
+            device_name = None
+            
+            for i, line in enumerate(lines):
+                line_lower = line.lower()
+                if any(g in line_lower for g in garmin_patterns):
+                    name_match = re.search(r'^\s*(.+?):', line)
+                    if name_match:
+                        device_name = name_match.group(1).strip()
+                    break
+            
+            return {
+                'connected': True,
+                'name': device_name or 'Garmin Device',
+                'vendor_id': '091e'
+            }
+            
+        except:
+            return None
+    
+    def _detect_via_ioreg(self):
+        """Detect Garmin via ioreg (for MTP devices)"""
+        try:
+            result = subprocess.run(
+                ['ioreg', '-p', 'IOUSB', '-l', '-w', '0'],
+                capture_output=True, text=True, timeout=10
+            )
+            
+            if result.returncode != 0:
+                return None
+            
+            output = result.stdout
+            
+            # Look for Garmin signature directly in the output
+            # Signature format: <1e09XXYY...> where 1e09 is Garmin vendor ID (little-endian)
+            # and XXYY is product ID (little-endian)
+            sig_pattern = re.search(r'"UsbDeviceSignature"\s*=\s*<1e09([a-f0-9]{4})', output, re.IGNORECASE)
+            
+            if not sig_pattern:
+                return None
+            
+            # Extract product ID from signature (little-endian)
+            hex_pid = sig_pattern.group(1)
+            product_id = int(hex_pid[2:4] + hex_pid[0:2], 16)
+            
+            # Map known Garmin product IDs to names
+            garmin_products = {
+                # Special modes
+                3: None,  # Charging/initializing mode - will be handled below
+                
+                # Fenix series
+                20920: "Fenix 8",
+                20921: "Fenix 8 Solar",
+                20922: "Fenix 8 AMOLED",
+                20736: "Fenix 7",
+                20737: "Fenix 7S",
+                20738: "Fenix 7X",
+                20480: "Fenix 6",
+                20481: "Fenix 6S",
+                20482: "Fenix 6X",
+                
+                # Forerunner series
+                20224: "Forerunner 965",
+                20096: "Forerunner 265",
+                20097: "Forerunner 265S", 
+                19968: "Forerunner 955",
+                19840: "Forerunner 255",
+                19712: "Forerunner 945",
+                19584: "Forerunner 745",
+                
+                # Epix
+                20352: "Epix Gen 2",
+                20353: "Epix Pro",
+                
+                # Venu
+                19456: "Venu 2",
+                19457: "Venu 2S",
+                19328: "Venu",
+                
+                # Instinct
+                19200: "Instinct 2",
+                19201: "Instinct 2S",
+                
+                # Edge
+                18944: "Edge 1040",
+                18688: "Edge 840",
+                18432: "Edge 540",
+                18176: "Edge 530",
+            }
+            
+            # Handle special modes
+            if product_id == 3:
+                return {
+                    'connected': True,
+                    'name': "Garmin Watch (initializing...)",
+                    'vendor_id': '091e',
+                    'product_id': product_id,
+                    'mode': 'charging'
+                }
+            elif product_id in garmin_products:
+                device_name = garmin_products[product_id]
+            else:
+                device_name = f"Garmin Watch (ID:{product_id})"
+            
+            return {
+                'connected': True,
+                'name': device_name,
+                'vendor_id': '091e',
+                'product_id': product_id,
+                'mode': 'mtp'
+            }
+            
+        except Exception as e:
+            return None
+    
+    def check_garmin_express_running(self):
+        """Check if Garmin Express is running (blocks MTP)"""
+        try:
+            result = subprocess.run(['pgrep', '-f', 'Garmin Express'],
+                                   capture_output=True, text=True, timeout=5)
+            return result.returncode == 0
+        except:
+            return False
+    
+    def kill_garmin_express(self):
+        """Kill Garmin Express if running"""
+        try:
+            subprocess.run(['pkill', '-f', 'Garmin Express'], timeout=5, capture_output=True)
+            subprocess.run(['pkill', '-f', 'GarminExpressService'], timeout=5, capture_output=True)
+            return True
+        except:
+            return False
+    
+    def refresh_device_status(self):
+        """Refresh the device connection status"""
+        # Check if widgets still exist
+        try:
+            if not self.device_status.winfo_exists():
+                return
+        except:
+            return
+        
+        device = self.detect_garmin_device()
+        garmin_express_running = self.check_garmin_express_running()
+        
+        # Remove any existing close button
+        if hasattr(self, 'close_ge_btn') and self.close_ge_btn:
+            try:
+                self.close_ge_btn.destroy()
+            except:
+                pass
+            self.close_ge_btn = None
+        
+        try:
+            if device:
+                # Check if device is in charging/initializing mode
+                if device.get('mode') == 'charging':
+                    self.device_status.config(text=f"🔄 {device['name']}", fg='#007AFF')
+                    self.device_status_detail.config(text="Wait for watch to enter MTP mode...")
+                elif garmin_express_running:
+                    self.device_status.config(text=f"⚠️ {device['name']} detected", fg='#FF9500')
+                    self.device_status_detail.config(text="Garmin Express is blocking - close it to transfer")
+                    
+                    # Add close button in the status container
+                    parent_frame = self.device_status_detail.master
+                    self.close_ge_btn = Button(parent_frame, text="Close Garmin Express",
+                                              font=('SF Pro Text', 11), bg='#FF9500', fg='white',
+                                              command=self.close_garmin_express_clicked, relief=FLAT,
+                                              cursor='hand2', padx=10, pady=4)
+                    self.close_ge_btn.pack(anchor='w', pady=(8, 0))
+                else:
+                    self.device_status.config(text=f"✅ {device['name']} connected", fg='#28a745')
+                    self.device_status_detail.config(text="Ready for transfer")
+            else:
+                self.device_status.config(text="❌ No Garmin device detected", fg='#dc3545')
+                self.device_status_detail.config(text="Connect watch via USB (keep screen awake)")
+        except:
+            pass  # Widget was destroyed
+    
+    def close_garmin_express_clicked(self):
+        """Handle Close Garmin Express button click"""
+        self.kill_garmin_express()
+        self.device_status.config(text="🔄 Closing Garmin Express...", fg='#666')
+        self.root.after(1500, self.refresh_device_status)
+    
+    def start_device_monitor(self):
+        """Start background thread to monitor device connection"""
+        def monitor():
+            while self._monitor_running:
+                try:
+                    self.root.after(0, self.refresh_device_status)
+                except:
+                    break
+                time.sleep(3)  # Check every 3 seconds
+        
+        thread = threading.Thread(target=monitor, daemon=True)
+        thread.start()
     
     def create_menu(self):
         """Create the application menu bar"""
@@ -366,11 +638,64 @@ class GarminUploaderMac:
         """Step 3: Transfer"""
         self.transfer_frame = parent
         
+        # Device status indicator
+        device_frame = Frame(parent, bg='#f0f0f0', padx=12, pady=12,
+                            highlightbackground='#ccc', highlightthickness=1)
+        device_frame.pack(fill=X, pady=(0, 10))
+        
+        # Header row with refresh button
+        header_row = Frame(device_frame, bg='#f0f0f0')
+        header_row.pack(fill=X)
+        
+        Label(header_row, text="Device Status:", font=('SF Pro Text', 11, 'bold'),
+              bg='#f0f0f0', fg='#333').pack(side=LEFT)
+        
+        # Use a proper styled button
+        self.refresh_btn = Button(header_row, text="↻ Refresh", font=('SF Pro Text', 11),
+                            bg='white', fg='#007AFF', relief=SOLID, cursor='hand2',
+                            borderwidth=1, padx=12, pady=4, 
+                            activebackground='#007AFF', activeforeground='white',
+                            command=self._refresh_clicked)
+        self.refresh_btn.pack(side=RIGHT)
+        
+        # Status container for proper layout
+        status_container = Frame(device_frame, bg='#f0f0f0')
+        status_container.pack(fill=X, pady=(10, 0))
+        
+        # Main status text
+        self.device_status = Label(status_container, text="🔍 Checking for device...",
+                                   font=('SF Pro Text', 13, 'bold'), bg='#f0f0f0', fg='#666',
+                                   anchor='w')
+        self.device_status.pack(fill=X)
+        
+        # Detail/tip text
+        self.device_status_detail = Label(status_container, text="Please wait...",
+                                          font=('SF Pro Text', 11), bg='#f0f0f0', fg='#666',
+                                          anchor='w')
+        self.device_status_detail.pack(fill=X, pady=(2, 0))
+        
         # Initial state - waiting
         self.transfer_status = Label(parent, 
             text="Stage your files first (Step 2), then transfer instructions will appear here.",
             font=('SF Pro Text', 11), bg='#fff', fg='#666', wraplength=480, justify=LEFT)
-        self.transfer_status.pack(fill=X)
+        self.transfer_status.pack(fill=X, pady=(5, 0))
+        
+        # Start device monitoring after UI is built
+        self.root.after(500, self.refresh_device_status)
+        self.root.after(1000, self.start_device_monitor)
+    
+    def _refresh_clicked(self):
+        """Handle refresh button click with visual feedback"""
+        self.refresh_btn.config(text="⏳ Checking...", state=DISABLED)
+        self.device_status.config(text="🔍 Checking for device...", fg='#666')
+        self.device_status_detail.config(text="Please wait...")
+        self.root.update()
+        
+        # Do the refresh
+        self.refresh_device_status()
+        
+        # Reset button
+        self.root.after(500, lambda: self.refresh_btn.config(text="↻ Refresh", state=NORMAL))
     
     def add_files(self):
         """Open file dialog to add .FIT files"""
@@ -512,11 +837,6 @@ class GarminUploaderMac:
                    command=lambda: webbrowser.open('https://openmtp.ganeshrvel.com'),
                    bg='#ff9800', fg='white', padx=10, pady=5, relief=FLAT,
                    cursor='hand2').pack(pady=(5, 0))
-    
-    def kill_garmin_express(self):
-        """Kill Garmin Express to free MTP access"""
-        subprocess.run(['pkill', '-f', 'Garmin Express'], capture_output=True)
-        subprocess.run(['pkill', '-f', 'GarminExpressService'], capture_output=True)
     
     def open_openmtp(self):
         """Open OpenMTP application"""
