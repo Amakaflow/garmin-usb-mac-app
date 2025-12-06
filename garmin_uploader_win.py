@@ -8,6 +8,9 @@ from tkinter import ttk, filedialog, messagebox
 from urllib.request import urlopen
 from urllib.error import URLError
 
+# Windows subprocess flag to prevent console windows from appearing
+CREATE_NO_WINDOW = 0x08000000
+
 try:
     from version import __version__, __app_name__, __github_repo__
 except ImportError:
@@ -204,7 +207,7 @@ class GarminUploaderWin:
                 continue
         try:
             ps_cmd = 'Get-PnpDevice -Class WPD -Status OK | Select-Object -ExpandProperty FriendlyName'
-            result = subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(['powershell', '-Command', ps_cmd], capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW)
             if result.returncode == 0 and result.stdout.strip():
                 keywords = ['garmin', 'fenix', 'forerunner', 'venu', 'instinct', 'epix', 'edge', 'vivoactive']
                 for line in result.stdout.strip().split('\n'):
@@ -220,14 +223,14 @@ class GarminUploaderWin:
     
     def check_garmin_express(self):
         try:
-            result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq GarminExpress.exe'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq GarminExpress.exe'], capture_output=True, text=True, timeout=5, creationflags=CREATE_NO_WINDOW)
             return 'GarminExpress.exe' in result.stdout
         except:
             return False
     
     def kill_garmin_express(self):
         try:
-            subprocess.run(['taskkill', '/F', '/IM', 'GarminExpress.exe'], timeout=5, capture_output=True)
+            subprocess.run(['taskkill', '/F', '/IM', 'GarminExpress.exe'], timeout=5, capture_output=True, creationflags=CREATE_NO_WINDOW)
         except:
             pass
 
@@ -1132,15 +1135,38 @@ class GarminUploaderWin:
                 subprocess.run(['explorer', 'shell:MyComputerFolder'])
 
 def main():
-    if DND_AVAILABLE:
-        try:
-            root = TkinterDnD.Tk()
-        except:
+    try:
+        if DND_AVAILABLE:
+            try:
+                root = TkinterDnD.Tk()
+            except:
+                root = Tk()
+        else:
             root = Tk()
-    else:
-        root = Tk()
-    GarminUploaderWin(root)
-    root.mainloop()
+        GarminUploaderWin(root)
+        root.mainloop()
+    except Exception as e:
+        # Write error to log file for debugging windowed builds
+        import traceback
+        log_file = os.path.join(os.path.expanduser('~'), 'garmin_uploader_error.log')
+        with open(log_file, 'w') as f:
+            f.write(f"Error starting Garmin Workout Uploader:\n")
+            f.write(f"{str(e)}\n\n")
+            f.write(traceback.format_exc())
+
+        # Try to show error dialog if possible
+        try:
+            from tkinter import Tk, messagebox
+            error_root = Tk()
+            error_root.withdraw()
+            messagebox.showerror(
+                "Startup Error",
+                f"Failed to start application.\nError log saved to:\n{log_file}\n\nError: {str(e)}"
+            )
+            error_root.destroy()
+        except:
+            pass
+        raise
 
 if __name__ == "__main__":
     main()
