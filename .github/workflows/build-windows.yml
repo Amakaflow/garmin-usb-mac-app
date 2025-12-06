@@ -46,6 +46,7 @@ jobs:
         pyinstaller --name "GarminWorkoutUploader" `
           --windowed `
           --onefile `
+          --hidden-import=win32timezone `
           $iconArg `
           --add-data "version.py;." `
           garmin_uploader_win.py
