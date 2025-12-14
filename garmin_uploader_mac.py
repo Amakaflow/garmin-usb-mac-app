@@ -279,13 +279,40 @@ class GarminUploaderMac:
 
     def check_for_updates_manual(self):
         """Manually check for updates from menu"""
-        update_info = UpdateChecker.check_for_updates()
-        if update_info is None:
-            messagebox.showerror("Error", "Could not check for updates. Please check your internet connection.")
-        elif update_info['available']:
-            self._show_update_notification(update_info)
-        else:
-            messagebox.showinfo("Up to Date", f"You're running the latest version (v{__version__}).")
+        # Show checking dialog
+        checking_window = Toplevel(self.root)
+        checking_window.title("Checking for Updates")
+        checking_window.geometry("300x80")
+        checking_window.resizable(False, False)
+        checking_window.transient(self.root)
+        checking_window.grab_set()
+
+        # Center on parent
+        checking_window.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - 300) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - 80) // 2
+        checking_window.geometry(f"+{x}+{y}")
+
+        Label(checking_window, text="🔄 Checking for updates...",
+              font=('SF Pro Text', 12)).pack(expand=True)
+
+        def do_check():
+            update_info = UpdateChecker.check_for_updates()
+            self.root.after(0, lambda: show_result(update_info))
+
+        def show_result(update_info):
+            try:
+                checking_window.destroy()
+            except:
+                pass
+            if update_info is None:
+                messagebox.showerror("Error", "Could not check for updates.\nPlease check your internet connection.")
+            elif update_info['available']:
+                self._show_update_notification(update_info)
+            else:
+                messagebox.showinfo("Up to Date", f"You're running the latest version (v{__version__}).")
+
+        threading.Thread(target=do_check, daemon=True).start()
 
     def check_openmtp(self):
         """Check if OpenMTP is installed"""
