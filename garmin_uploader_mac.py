@@ -95,11 +95,14 @@ class UpdateChecker:
     def check_for_updates():
         """Check if a new version is available on GitHub"""
         import ssl
-        import certifi
+        try:
+            import certifi
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            # Fallback if certifi not available (shouldn't happen in bundled app)
+            ssl_context = ssl.create_default_context()
         try:
             url = f"https://api.github.com/repos/{__github_repo__}/releases/latest"
-            # Create SSL context with certifi certificates for bundled apps
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
             with urlopen(url, timeout=10, context=ssl_context) as response:
                 data = json.loads(response.read().decode())
                 latest_version = data['tag_name'].lstrip('v')
@@ -124,15 +127,17 @@ class UpdateChecker:
     def download_update(url, callback=None):
         """Download the update installer"""
         import ssl
-        import certifi
         import tempfile
+        try:
+            import certifi
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+        except ImportError:
+            ssl_context = ssl.create_default_context()
         try:
             # Determine filename from URL
             filename = url.split('/')[-1] if '/' in url else 'GarminWorkoutUploader.dmg'
             temp_file = os.path.join(tempfile.gettempdir(), filename)
 
-            # Create SSL context with certifi certificates for bundled apps
-            ssl_context = ssl.create_default_context(cafile=certifi.where())
             with urlopen(url, timeout=60, context=ssl_context) as response:
                 total_size = int(response.headers.get('content-length', 0))
                 downloaded = 0
