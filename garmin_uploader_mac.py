@@ -48,6 +48,20 @@ try:
 except ImportError:
     FITFILETOOL_AVAILABLE = False
 
+# Import shared display constants
+try:
+    from fit_display import (
+        SPORT_COLORS, SPORT_DISPLAY_NAMES, SUB_SPORT_DISPLAY_NAMES,
+        get_sport_display, get_sport_color, format_duration, format_distance
+    )
+    FIT_DISPLAY_AVAILABLE = True
+except ImportError:
+    FIT_DISPLAY_AVAILABLE = False
+    # Fallback definitions
+    SPORT_COLORS = {'training': '#8b5cf6', 'fitness_equipment': '#06b6d4'}
+    def get_sport_display(sport, sub_sport=None): return sport.replace('_', ' ').title() if sport else 'Workout'
+    def get_sport_color(sport, sub_sport=None): return SPORT_COLORS.get(sport, '#6b7280')
+
 # Garmin USB Vendor ID
 GARMIN_VENDOR_ID = "0x091e"
 
@@ -1348,47 +1362,8 @@ You still need to drag them to OpenMTP."""
         sport = workout_data.get('sport')
         sub_sport = workout_data.get('sub_sport')
         if sport:
-            # Colors for different sport types
-            sport_colors = {
-                'running': '#22c55e',
-                'cycling': '#f97316',
-                'swimming': '#3b82f6',
-                'strength_training': '#ef4444',
-                'training': '#8b5cf6',
-                'walking': '#84cc16',
-                'hiking': '#a3e635',
-                'fitness_equipment': '#06b6d4',  # Cyan for cardio/HIIT
-            }
-            # Better display names for sport types
-            sport_display_names = {
-                'fitness_equipment': 'Cardio',
-                'training': 'Strength',
-                'running': 'Running',
-                'cycling': 'Cycling',
-                'swimming': 'Swimming',
-            }
-            sub_sport_display_names = {
-                'strength_training': 'Strength',
-                'generic': None,  # Use sport name instead
-                'cardio_training': 'Cardio',
-                'hiit': 'HIIT',
-            }
-
-            # Determine display name - prefer sub_sport if meaningful
-            if sub_sport and sub_sport in sub_sport_display_names:
-                sport_display = sub_sport_display_names[sub_sport]
-                if sport_display is None:
-                    sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-            elif sub_sport and sub_sport != 'generic':
-                sport_display = sub_sport.replace('_', ' ').title()
-            else:
-                sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-
-            # Use sub_sport color if it's strength training
-            if sub_sport == 'strength_training':
-                sport_color = sport_colors.get('strength_training', '#ef4444')
-            else:
-                sport_color = sport_colors.get(sport, '#6b7280')
+            sport_display = get_sport_display(sport, sub_sport)
+            sport_color = get_sport_color(sport, sub_sport)
 
             sport_badge = Label(watch_frame, text=f"  {sport_display}  ",
                                font=('SF Pro Text', 10, 'bold'),
@@ -1561,30 +1536,6 @@ You still need to drag them to OpenMTP."""
         canvas.bind("<MouseWheel>", on_mousewheel)
         canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", on_mousewheel))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
-        
-        # Sport colors
-        sport_colors = {
-            'running': '#22c55e',
-            'cycling': '#f97316',
-            'swimming': '#3b82f6',
-            'strength_training': '#ef4444',
-            'training': '#8b5cf6',
-            'walking': '#84cc16',
-            'hiking': '#a3e635',
-            'fitness_equipment': '#06b6d4',  # Cyan for cardio/HIIT
-        }
-
-        sport_display_names = {
-            'fitness_equipment': 'Cardio',
-            'training': 'Strength',
-        }
-
-        sub_sport_display_names = {
-            'strength_training': 'Strength',
-            'generic': None,  # Use sport name instead
-            'cardio_training': 'Cardio',
-            'hiit': 'HIIT',
-        }
 
         # Parse and display each file as a summary row
         for filepath in filepaths:
@@ -1610,19 +1561,8 @@ You still need to drag them to OpenMTP."""
             sport = workout_data.get('sport')
             sub_sport = workout_data.get('sub_sport')
             if sport:
-                # Determine display name based on sub_sport or sport
-                if sub_sport and sub_sport in sub_sport_display_names:
-                    sport_display = sub_sport_display_names[sub_sport]
-                    if sport_display is None:
-                        sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-                else:
-                    sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-
-                # Determine color based on sub_sport or sport
-                if sub_sport == 'strength_training':
-                    sport_color = sport_colors.get('strength_training', '#ef4444')
-                else:
-                    sport_color = sport_colors.get(sport, '#6b7280')
+                sport_display = get_sport_display(sport, sub_sport)
+                sport_color = get_sport_color(sport, sub_sport)
                 Label(top_row, text=f" {sport_display} ", font=('SF Pro Text', 9, 'bold'),
                       bg=sport_color, fg='#fff').pack(side=RIGHT)
             
@@ -1705,40 +1645,8 @@ You still need to drag them to OpenMTP."""
         sport = workout_data.get('sport')
         sub_sport = workout_data.get('sub_sport')
         if sport:
-            sport_colors = {
-                'running': '#22c55e',
-                'cycling': '#f97316',
-                'swimming': '#3b82f6',
-                'strength_training': '#ef4444',
-                'training': '#8b5cf6',
-                'walking': '#84cc16',
-                'hiking': '#a3e635',
-                'fitness_equipment': '#06b6d4',  # Cyan for cardio/HIIT
-            }
-            sport_display_names = {
-                'fitness_equipment': 'Cardio',
-                'training': 'Strength',
-            }
-            sub_sport_display_names = {
-                'strength_training': 'Strength',
-                'generic': None,  # Use sport name instead
-                'cardio_training': 'Cardio',
-                'hiit': 'HIIT',
-            }
-
-            # Determine display name based on sub_sport or sport
-            if sub_sport and sub_sport in sub_sport_display_names:
-                sport_display = sub_sport_display_names[sub_sport]
-                if sport_display is None:
-                    sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-            else:
-                sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-
-            # Determine color based on sub_sport or sport
-            if sub_sport == 'strength_training':
-                sport_color = sport_colors.get('strength_training', '#ef4444')
-            else:
-                sport_color = sport_colors.get(sport, '#6b7280')
+            sport_display = get_sport_display(sport, sub_sport)
+            sport_color = get_sport_color(sport, sub_sport)
 
             sport_badge = Label(watch_frame, text=f"  {sport_display}  ",
                                font=('SF Pro Text', 10, 'bold'),

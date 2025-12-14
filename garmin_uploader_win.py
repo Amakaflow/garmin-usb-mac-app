@@ -42,6 +42,20 @@ try:
 except ImportError:
     FITFILETOOL_AVAILABLE = False
 
+# Import shared display constants
+try:
+    from fit_display import (
+        SPORT_COLORS, SPORT_DISPLAY_NAMES, SUB_SPORT_DISPLAY_NAMES,
+        get_sport_display, get_sport_color, format_duration, format_distance
+    )
+    FIT_DISPLAY_AVAILABLE = True
+except ImportError:
+    FIT_DISPLAY_AVAILABLE = False
+    # Fallback definitions
+    SPORT_COLORS = {'training': '#8b5cf6', 'fitness_equipment': '#06b6d4'}
+    def get_sport_display(sport, sub_sport=None): return sport.replace('_', ' ').title() if sport else 'Workout'
+    def get_sport_color(sport, sub_sport=None): return SPORT_COLORS.get(sport, '#6b7280')
+
 # Try to import win32com for MTP file transfer
 try:
     import win32com.client
@@ -605,40 +619,8 @@ class GarminUploaderWin:
         sport = workout_data.get('sport')
         sub_sport = workout_data.get('sub_sport')
         if sport:
-            sport_colors = {
-                'running': '#22c55e',
-                'cycling': '#f97316',
-                'swimming': '#3b82f6',
-                'strength_training': '#ef4444',
-                'training': '#8b5cf6',
-                'walking': '#84cc16',
-                'hiking': '#a3e635',
-                'fitness_equipment': '#06b6d4',  # Cyan for cardio/HIIT
-            }
-            sport_display_names = {
-                'fitness_equipment': 'Cardio',
-                'training': 'Strength',
-            }
-            sub_sport_display_names = {
-                'strength_training': 'Strength',
-                'generic': None,  # Use sport name instead
-                'cardio_training': 'Cardio',
-                'hiit': 'HIIT',
-            }
-
-            # Determine display name based on sub_sport or sport
-            if sub_sport and sub_sport in sub_sport_display_names:
-                sport_display = sub_sport_display_names[sub_sport]
-                if sport_display is None:
-                    sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-            else:
-                sport_display = sport_display_names.get(sport, sport.replace('_', ' ').title())
-
-            # Determine color based on sub_sport or sport
-            if sub_sport == 'strength_training':
-                sport_color = sport_colors.get('strength_training', '#ef4444')
-            else:
-                sport_color = sport_colors.get(sport, '#6b7280')
+            sport_display = get_sport_display(sport, sub_sport)
+            sport_color = get_sport_color(sport, sub_sport)
 
             sport_badge = Label(watch_frame, text=f"  {sport_display}  ",
                                font=('Segoe UI', 10, 'bold'),
