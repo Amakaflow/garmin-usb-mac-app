@@ -48,5 +48,9 @@ Output/
 *.backup
 .claude/
 
+# Test files
+*.fit
+debug_*.py
+
 # Don't ignore installer.iss
 !installer.iss
