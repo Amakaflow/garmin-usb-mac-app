@@ -271,31 +271,35 @@ class GarminUploaderMac:
             if installer_path and installer_path.endswith('.dmg'):
                 # Auto-install from DMG
                 try:
-                    # Mount the DMG
+                    # Mount the DMG and get mount point from output
                     mount_result = subprocess.run(
-                        ['hdiutil', 'attach', installer_path, '-nobrowse', '-quiet'],
+                        ['hdiutil', 'attach', installer_path, '-nobrowse'],
                         capture_output=True, text=True
                     )
                     if mount_result.returncode != 0:
-                        raise Exception("Failed to mount DMG")
+                        raise Exception(f"Failed to mount DMG: {mount_result.stderr}")
 
-                    # Find the mounted volume
+                    # Parse mount point from output (last line contains the volume path)
                     mount_point = None
-                    for line in subprocess.run(['hdiutil', 'info'], capture_output=True, text=True).stdout.split('\n'):
-                        if 'GarminWorkoutUploader' in line or '/Volumes/' in line:
-                            if '/Volumes/' in line:
-                                mount_point = line.split('\t')[-1].strip()
-                                if os.path.exists(mount_point):
+                    for line in mount_result.stdout.strip().split('\n'):
+                        if '/Volumes/' in line:
+                            # Extract the path after /Volumes/
+                            parts = line.split('\t')
+                            for part in parts:
+                                if '/Volumes/' in part:
+                                    mount_point = part.strip()
                                     break
 
-                    if not mount_point:
-                        # Try common volume name
+                    # Fallback: check known volume names
+                    if not mount_point or not os.path.exists(mount_point):
+                        import time
+                        time.sleep(1)  # Wait for mount to complete
                         for vol in ['/Volumes/Garmin Workout Uploader', '/Volumes/GarminWorkoutUploader']:
                             if os.path.exists(vol):
                                 mount_point = vol
                                 break
 
-                    if not mount_point:
+                    if not mount_point or not os.path.exists(mount_point):
                         raise Exception("Could not find mounted volume")
 
                     # Find the .app in the mounted volume
@@ -311,11 +315,14 @@ class GarminUploaderMac:
                     # Copy to /Applications
                     app_dest = '/Applications/Garmin Workout Uploader.app'
                     if os.path.exists(app_dest):
-                        subprocess.run(['rm', '-rf', app_dest])
-                    subprocess.run(['cp', '-R', app_source, app_dest])
+                        subprocess.run(['rm', '-rf', app_dest], check=True)
+
+                    copy_result = subprocess.run(['cp', '-R', app_source, app_dest], capture_output=True, text=True)
+                    if copy_result.returncode != 0:
+                        raise Exception(f"Failed to copy app: {copy_result.stderr}")
 
                     # Unmount the DMG
-                    subprocess.run(['hdiutil', 'detach', mount_point, '-quiet'])
+                    subprocess.run(['hdiutil', 'detach', mount_point, '-quiet', '-force'])
 
                     # Ask to restart
                     response = messagebox.askyesno(
@@ -331,9 +338,9 @@ class GarminUploaderMac:
                 except Exception as e:
                     # Fallback to manual install
                     subprocess.run(['open', installer_path])
-                    messagebox.showinfo("Download Complete",
-                        f"Auto-install failed. The DMG has been opened.\n\n"
-                        f"Please drag the app to Applications manually.")
+                    messagebox.showinfo("Auto-Install Issue",
+                        f"Auto-install encountered an issue:\n{str(e)}\n\n"
+                        f"The DMG has been opened. Please drag the app to Applications manually.")
             elif installer_path:
                 # Non-DMG file, open it
                 subprocess.run(['open', installer_path])
