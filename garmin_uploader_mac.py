@@ -1109,7 +1109,8 @@ You still need to drag them to OpenMTP."""
         legend_items = Frame(legend_frame, bg='#1a1a1a')
         legend_items.pack(fill=X, pady=(5, 0))
         
-        if sport in ['running', 'cycling', 'swimming', 'walking', 'hiking']:
+        sport_lower = (sport or '').lower()
+        if sport_lower in ['running', 'cycling', 'swimming', 'walking', 'hiking'] or 'run' in sport_lower:
             # Cardio legend
             self.create_legend_badge(legend_items, "Zone/Target", "#3b82f6")
             self.create_legend_badge(legend_items, "Duration", "#8b5cf6")
@@ -1400,7 +1401,8 @@ You still need to drag them to OpenMTP."""
     
     def create_exercise_row(self, parent, exercise, index, sport=None):
         """Create a single exercise row in the preview"""
-        is_cardio = sport in ['running', 'cycling', 'swimming', 'walking', 'hiking']
+        sport_lower = (sport or '').lower()
+        is_cardio = sport_lower in ['running', 'cycling', 'swimming', 'walking', 'hiking'] or 'run' in sport_lower
         step_type = exercise.get('step_type', 'active')
         
         # Different background colors for different step types
@@ -1438,12 +1440,17 @@ You still need to drag them to OpenMTP."""
             zone = exercise.get('zone')
             if zone:
                 self.create_badge(badges, zone, "#3b82f6")
-            
+
             # Duration badge (purple)
             if exercise.get('duration'):
                 duration_str = self.format_duration(exercise['duration'])
                 self.create_badge(badges, duration_str, "#8b5cf6")
-            
+
+            # Distance badge (green) for cardio
+            if exercise.get('distance'):
+                dist_str = self.format_distance(exercise['distance'])
+                self.create_badge(badges, dist_str, "#22c55e")
+
             # Step type indicator
             if step_type == 'warmup':
                 Label(badges, text="🔥 Warm Up", font=('SF Pro Text', 9),
@@ -1596,6 +1603,8 @@ You still need to drag them to OpenMTP."""
                         step['reps'] = int(field.value)
                     elif field.name == 'duration_time' and field.value:
                         step['duration'] = float(field.value)
+                    elif field.name == 'duration_distance' and field.value:
+                        step['distance'] = float(field.value)
                     elif field.name == 'intensity':
                         intensity = str(field.value) if field.value else None
                         step['intensity'] = intensity
@@ -1618,7 +1627,10 @@ You still need to drag them to OpenMTP."""
                 steps_raw.append(step)
             
             # Determine if this is a cardio workout (running, cycling, etc.) vs strength
-            is_cardio = workout_data.get('sport') in ['running', 'cycling', 'swimming', 'walking', 'hiking']
+            sport_lower = (workout_data.get('sport') or '').lower()
+            sub_sport_lower = (workout_data.get('sub_sport') or '').lower()
+            cardio_sports = ['running', 'cycling', 'swimming', 'walking', 'hiking', 'run', 'bike', 'swim', 'walk', 'hike', 'cardio', 'trail_running', 'treadmill']
+            is_cardio = sport_lower in cardio_sports or sub_sport_lower in cardio_sports or 'run' in sport_lower or 'run' in sub_sport_lower
             
             # Third pass: process steps
             exercises = []
@@ -1688,6 +1700,8 @@ You still need to drag them to OpenMTP."""
                     exercise['reps'] = step['reps']
                 if step.get('duration'):
                     exercise['duration'] = step['duration']
+                if step.get('distance'):
+                    exercise['distance'] = step['distance']
                 if step.get('weight'):
                     weight = step['weight']
                     unit = step.get('weight_unit', 'kg')
