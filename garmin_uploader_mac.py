@@ -237,45 +237,47 @@ class GarminUploaderMac:
                cursor='hand2',
                command=lambda: webbrowser.open(f"https://github.com/{__github_repo__}/releases/latest")).pack(side=RIGHT)
 
-    def _download_and_install(self, update_info):
+    def _download_and_install(self, update_info, skip_confirm=False):
         """Download and install update"""
-        response = messagebox.askyesno(
-            "Download Update",
-            f"Download version {update_info['version']}?\n\n"
-            "The installer will open after download."
-        )
+        if not skip_confirm:
+            response = messagebox.askyesno(
+                "Download Update",
+                f"Download version {update_info['version']}?\n\n"
+                "The installer will open after download."
+            )
+            if not response:
+                return
 
-        if response:
-            # Show progress dialog
-            progress_window = Toplevel(self.root)
-            progress_window.title("Downloading Update")
-            progress_window.geometry("400x100")
-            progress_window.resizable(False, False)
-            progress_window.transient(self.root)
+        # Show progress dialog
+        progress_window = Toplevel(self.root)
+        progress_window.title("Downloading Update")
+        progress_window.geometry("400x100")
+        progress_window.resizable(False, False)
+        progress_window.transient(self.root)
 
-            Label(progress_window, text="Downloading update...", font=('SF Pro Text', 11)).pack(pady=10)
+        Label(progress_window, text="Downloading update...", font=('SF Pro Text', 11)).pack(pady=10)
 
-            progress_bar = ttk.Progressbar(progress_window, length=350, mode='determinate')
-            progress_bar.pack(pady=10)
+        progress_bar = ttk.Progressbar(progress_window, length=350, mode='determinate')
+        progress_bar.pack(pady=10)
 
-            def update_progress(pct):
-                progress_bar['value'] = pct * 100
-                progress_window.update()
+        def update_progress(pct):
+            progress_bar['value'] = pct * 100
+            progress_window.update()
 
-            def do_download():
-                installer_path = UpdateChecker.download_update(update_info['url'], update_progress)
-                progress_window.destroy()
+        def do_download():
+            installer_path = UpdateChecker.download_update(update_info['url'], update_progress)
+            progress_window.destroy()
 
-                if installer_path:
-                    # On Mac, open the .dmg or .pkg file
-                    subprocess.run(['open', installer_path])
-                    messagebox.showinfo("Download Complete",
-                        f"The installer has been downloaded and opened.\n\n"
-                        f"Please follow the installation instructions to update.")
-                else:
-                    messagebox.showerror("Download Failed", "Could not download the update. Please try again.")
+            if installer_path:
+                # On Mac, open the .dmg or .pkg file
+                subprocess.run(['open', installer_path])
+                messagebox.showinfo("Download Complete",
+                    f"The installer has been downloaded and opened.\n\n"
+                    f"Please follow the installation instructions to update.")
+            else:
+                messagebox.showerror("Download Failed", "Could not download the update. Please try again.")
 
-            threading.Thread(target=do_download, daemon=True).start()
+        threading.Thread(target=do_download, daemon=True).start()
 
     def check_for_updates_manual(self):
         """Manually check for updates from menu"""
@@ -308,7 +310,16 @@ class GarminUploaderMac:
             if update_info is None:
                 messagebox.showerror("Error", "Could not check for updates.\nPlease check your internet connection.")
             elif update_info['available']:
-                self._show_update_notification(update_info)
+                # Show dialog asking to download
+                response = messagebox.askyesno(
+                    "Update Available",
+                    f"A new version is available!\n\n"
+                    f"Current version: v{__version__}\n"
+                    f"New version: v{update_info['version']}\n\n"
+                    f"Would you like to download the update?"
+                )
+                if response:
+                    self._download_and_install(update_info, skip_confirm=True)
             else:
                 messagebox.showinfo("Up to Date", f"You're running the latest version (v{__version__}).")
 
