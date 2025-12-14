@@ -5,7 +5,7 @@ a = Analysis(
     ['garmin_uploader_mac.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('version.py', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
