@@ -312,8 +312,12 @@ class GarminUploaderMac:
                     if not app_source:
                         raise Exception("Could not find app in DMG")
 
-                    # Copy to /Applications
-                    app_dest = '/Applications/Garmin Workout Uploader.app'
+                    # Create ~/Applications if it doesn't exist
+                    home_apps = os.path.expanduser('~/Applications')
+                    os.makedirs(home_apps, exist_ok=True)
+
+                    # Install to ~/Applications (no admin needed)
+                    app_dest = os.path.join(home_apps, 'Garmin Workout Uploader.app')
                     if os.path.exists(app_dest):
                         subprocess.run(['rm', '-rf', app_dest], check=True)
 
@@ -327,7 +331,8 @@ class GarminUploaderMac:
                     # Ask to restart
                     response = messagebox.askyesno(
                         "Update Installed",
-                        f"Version {update_info['version']} has been installed!\n\n"
+                        f"Version {update_info['version']} has been installed to:\n"
+                        f"~/Applications/\n\n"
                         f"Restart the app now to use the new version?"
                     )
                     if response:
