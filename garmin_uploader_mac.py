@@ -1420,17 +1420,26 @@ You still need to drag them to OpenMTP."""
         # Display exercises
         exercises = workout_data.get('steps', [])
         total_sets = 0
-        
+        rest_count = 0
+
         for i, exercise in enumerate(exercises):
             self.create_exercise_row(exercise_frame, exercise, i, workout_data.get('sport'))
             total_sets += exercise.get('sets', 1)
-        
+            if exercise.get('is_rest') or exercise.get('step_type') == 'rest':
+                rest_count += 1
+
         # Footer stats
         footer = Frame(watch_frame, bg='#000')
         footer.pack(fill=X, pady=(15, 5))
-        
-        stats_text = f"{len(exercises)} steps • {total_sets} total sets" if total_sets > len(exercises) else f"{len(exercises)} steps"
-        Label(footer, text=stats_text, font=('SF Pro Text', 11),
+
+        # Build stats parts
+        stats_parts = [f"{len(exercises)} steps"]
+        if total_sets > len(exercises):
+            stats_parts.append(f"{total_sets} total sets")
+        if rest_count > 0:
+            stats_parts.append(f"{rest_count} rest")
+
+        Label(footer, text=" • ".join(stats_parts), font=('SF Pro Text', 11),
               bg='#000', fg='#666').pack()
         
         # Legend - different for cardio vs strength
@@ -1450,13 +1459,13 @@ You still need to drag them to OpenMTP."""
             self.create_legend_badge(legend_items, "Duration", "#8b5cf6")
             self.create_legend_badge(legend_items, "Warmup", "#22c55e")
             self.create_legend_badge(legend_items, "Cooldown", "#6b7280")
+            self.create_legend_badge(legend_items, "Rest", "#f97316")
         else:
-            # Strength legend
+            # Strength/Cardio legend
             self.create_legend_badge(legend_items, "Reps", "#3b82f6")
             self.create_legend_badge(legend_items, "Duration", "#8b5cf6")
             self.create_legend_badge(legend_items, "Sets", "#22c55e")
-            self.create_legend_badge(legend_items, "Weight", "#f97316")
-            self.create_legend_badge(legend_items, "Rest", "#6b7280")
+            self.create_legend_badge(legend_items, "Rest", "#f97316")
         
         # Close button
         Button(main, text="Close", font=('SF Pro Text', 12),
@@ -1700,113 +1709,165 @@ You still need to drag them to OpenMTP."""
         # Display exercises
         exercises = workout_data.get('steps', [])
         total_sets = 0
-        
+        rest_count = 0
+
         for i, exercise in enumerate(exercises):
             self.create_exercise_row(exercise_frame, exercise, i, sport)
             total_sets += exercise.get('sets', 1)
-        
+            if exercise.get('is_rest') or exercise.get('step_type') == 'rest':
+                rest_count += 1
+
         # Footer stats
         footer = Frame(watch_frame, bg='#000')
         footer.pack(fill=X, pady=(15, 5))
-        
-        stats_text = f"{len(exercises)} steps • {total_sets} total sets" if total_sets > len(exercises) else f"{len(exercises)} steps"
-        Label(footer, text=stats_text, font=('SF Pro Text', 11),
+
+        # Build stats parts
+        stats_parts = [f"{len(exercises)} steps"]
+        if total_sets > len(exercises):
+            stats_parts.append(f"{total_sets} total sets")
+        if rest_count > 0:
+            stats_parts.append(f"{rest_count} rest")
+
+        Label(footer, text=" • ".join(stats_parts), font=('SF Pro Text', 11),
               bg='#000', fg='#666').pack()
-    
+
     def create_exercise_row(self, parent, exercise, index, sport=None):
-        """Create a single exercise row in the preview"""
+        """Create a single exercise row in the preview - Garmin watch style"""
         sport_lower = (sport or '').lower()
         is_cardio = sport_lower in ['running', 'cycling', 'swimming', 'walking', 'hiking'] or 'run' in sport_lower
         step_type = exercise.get('step_type', 'active')
-        
+        is_rest = exercise.get('is_rest', False) or step_type == 'rest'
+        duration_type = exercise.get('duration_type', '')
+
         # Different background colors for different step types
         if step_type == 'warmup':
             bg_color = '#0a2e1a'  # Dark green tint
             border_color = '#22c55e'
+            step_icon = '🔥'
         elif step_type == 'cooldown':
             bg_color = '#1a1a2e'  # Dark blue tint
             border_color = '#6b7280'
-        elif step_type == 'rest':
-            bg_color = '#1a1a1a'
-            border_color = '#333'
+            step_icon = '❄️'
+        elif is_rest:
+            bg_color = '#1a1a1a'  # Dark gray for rest
+            border_color = '#f97316'  # Orange border for rest
+            step_icon = '⏸'
         else:
             bg_color = '#111'
             border_color = '#222'
-        
+            step_icon = None
+
         row = Frame(parent, bg=bg_color, highlightbackground=border_color, highlightthickness=1)
         row.pack(fill=X, pady=2, padx=2)
-        
-        # Exercise content
-        content = Frame(row, bg=bg_color, padx=10, pady=8)
+
+        # Main content with step number on left (Garmin style)
+        content = Frame(row, bg=bg_color)
         content.pack(fill=X)
-        
-        # Exercise name
-        name = exercise.get('name', f'Exercise {index + 1}')
-        Label(content, text=name, font=('SF Pro Text', 12, 'bold'),
-              bg=bg_color, fg='#fff', anchor='w').pack(fill=X)
-        
-        # Badges row
-        badges = Frame(content, bg=bg_color)
-        badges.pack(fill=X, pady=(5, 0))
-        
-        if is_cardio:
-            # Zone badge (blue) for cardio
-            zone = exercise.get('zone')
-            if zone:
-                self.create_badge(badges, zone, "#3b82f6")
 
-            # Duration badge (purple)
-            if exercise.get('duration'):
+        # Step number circle (Garmin watch style)
+        step_num_frame = Frame(content, bg=bg_color, width=40)
+        step_num_frame.pack(side=LEFT, padx=(8, 0), pady=8)
+        step_num_frame.pack_propagate(False)
+
+        step_num_color = '#f97316' if is_rest else '#3b82f6'
+        Label(step_num_frame, text=str(index + 1), font=('SF Pro Text', 11, 'bold'),
+              bg=step_num_color, fg='#fff', width=3, pady=2).pack(expand=True)
+
+        # Exercise details
+        details = Frame(content, bg=bg_color, padx=8, pady=8)
+        details.pack(side=LEFT, fill=BOTH, expand=True)
+
+        # For rest steps, show special display
+        if is_rest:
+            # Rest header with icon
+            name = exercise.get('name', 'Rest')
+            if name.lower() == 'rest' or not name:
+                name = 'Rest'
+            Label(details, text=f"{step_icon} {name}", font=('SF Pro Text', 12, 'bold'),
+                  bg=bg_color, fg='#f97316', anchor='w').pack(fill=X)
+
+            # Rest duration or "Press Lap"
+            badges = Frame(details, bg=bg_color)
+            badges.pack(fill=X, pady=(5, 0))
+
+            if duration_type == 'open':
+                self.create_badge(badges, "Press Lap", "#f97316")
+            elif exercise.get('duration'):
                 duration_str = self.format_duration(exercise['duration'])
-                self.create_badge(badges, duration_str, "#8b5cf6")
-
-            # Distance badge (green) for cardio
-            if exercise.get('distance'):
-                dist_str = self.format_distance(exercise['distance'])
-                self.create_badge(badges, dist_str, "#22c55e")
-
-            # Step type indicator
-            if step_type == 'warmup':
-                Label(badges, text="🔥 Warm Up", font=('SF Pro Text', 9),
-                      bg='#22c55e', fg='#fff', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
-            elif step_type == 'cooldown':
-                Label(badges, text="❄️ Cool Down", font=('SF Pro Text', 9),
-                      bg='#6b7280', fg='#fff', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
+                self.create_badge(badges, duration_str, "#f97316")
+            elif duration_type == 'time' and exercise.get('duration_value'):
+                duration_str = self.format_duration(exercise['duration_value'] / 1000)  # ms to seconds
+                self.create_badge(badges, duration_str, "#f97316")
+            else:
+                self.create_badge(badges, "Press Lap", "#f97316")
         else:
-            # Strength workout badges
-            # Reps badge (blue)
-            if exercise.get('reps'):
-                self.create_badge(badges, f"{exercise['reps']} reps", "#3b82f6")
-            
-            # Duration badge (purple)
-            if exercise.get('duration'):
-                duration_str = self.format_duration(exercise['duration'])
-                self.create_badge(badges, duration_str, "#8b5cf6")
-            
-            # Distance badge (green)
-            if exercise.get('distance'):
-                dist_str = self.format_distance(exercise['distance'])
-                self.create_badge(badges, dist_str, "#22c55e")
-            
-            # Sets badge (green, only if > 1)
-            sets = exercise.get('sets', 1)
-            if sets > 1:
-                self.create_badge(badges, f"{sets} sets", "#22c55e")
-            
-            # Weight badge (orange)
-            if exercise.get('weight'):
-                self.create_badge(badges, exercise['weight'], "#f97316")
-            
-            # Rest badge (gray)
-            if exercise.get('rest'):
-                rest_str = self.format_duration(exercise['rest'])
-                self.create_badge(badges, f"Rest {rest_str}", "#6b7280")
-            
-            # Exercise type
-            ex_type = exercise.get('type', '')
-            if ex_type and ex_type not in name.lower():
-                Label(badges, text=ex_type.title(), font=('SF Pro Text', 9),
-                      bg='#333', fg='#999', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
+            # Exercise name with optional step type icon
+            name = exercise.get('name', f'Exercise {index + 1}')
+            display_name = f"{step_icon} {name}" if step_icon else name
+            Label(details, text=display_name, font=('SF Pro Text', 12, 'bold'),
+                  bg=bg_color, fg='#fff', anchor='w').pack(fill=X)
+
+            # Badges row
+            badges = Frame(details, bg=bg_color)
+            badges.pack(fill=X, pady=(5, 0))
+
+            if is_cardio:
+                # Zone badge (blue) for cardio
+                zone = exercise.get('zone')
+                if zone:
+                    self.create_badge(badges, zone, "#3b82f6")
+
+                # Duration badge (purple)
+                if exercise.get('duration'):
+                    duration_str = self.format_duration(exercise['duration'])
+                    self.create_badge(badges, duration_str, "#8b5cf6")
+                elif duration_type == 'open':
+                    self.create_badge(badges, "Press Lap", "#8b5cf6")
+
+                # Distance badge (green) for cardio
+                if exercise.get('distance'):
+                    dist_str = self.format_distance(exercise['distance'])
+                    self.create_badge(badges, dist_str, "#22c55e")
+
+                # Step type indicator
+                if step_type == 'warmup':
+                    Label(badges, text="Warm Up", font=('SF Pro Text', 9),
+                          bg='#22c55e', fg='#fff', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
+                elif step_type == 'cooldown':
+                    Label(badges, text="Cool Down", font=('SF Pro Text', 9),
+                          bg='#6b7280', fg='#fff', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
+            else:
+                # Strength/cardio workout badges
+                # Reps badge (blue)
+                if exercise.get('reps'):
+                    self.create_badge(badges, f"{exercise['reps']} reps", "#3b82f6")
+
+                # Duration badge (purple) or Press Lap
+                if exercise.get('duration'):
+                    duration_str = self.format_duration(exercise['duration'])
+                    self.create_badge(badges, duration_str, "#8b5cf6")
+                elif duration_type == 'open':
+                    self.create_badge(badges, "Press Lap", "#8b5cf6")
+
+                # Distance badge (green)
+                if exercise.get('distance'):
+                    dist_str = self.format_distance(exercise['distance'])
+                    self.create_badge(badges, dist_str, "#22c55e")
+
+                # Sets badge (green, only if > 1)
+                sets = exercise.get('sets', 1)
+                if sets > 1:
+                    self.create_badge(badges, f"{sets} sets", "#22c55e")
+
+                # Weight badge (orange)
+                if exercise.get('weight'):
+                    self.create_badge(badges, exercise['weight'], "#f97316")
+
+                # Category badge (gray)
+                category = exercise.get('category', '')
+                if category and category not in name.lower():
+                    Label(badges, text=category.replace('_', ' ').title(), font=('SF Pro Text', 9),
+                          bg='#333', fg='#999', padx=6, pady=2).pack(side=LEFT, padx=(5, 0))
     
     def create_badge(self, parent, text, color):
         """Create a colored badge"""
