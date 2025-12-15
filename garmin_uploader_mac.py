@@ -129,7 +129,8 @@ class UpdateChecker:
                 return {
                     'available': UpdateChecker._compare_versions(latest_version, __version__),
                     'version': latest_version,
-                    'url': download_url or data['html_url'],
+                    'url': download_url,  # None if no DMG/PKG asset found
+                    'release_url': data['html_url'],  # For manual download fallback
                     'notes': data.get('body', '')
                 }
         except Exception as e:
@@ -252,6 +253,19 @@ class GarminUploaderMac:
 
     def _download_and_install(self, update_info, skip_confirm=False):
         """Download and install update"""
+        # Check if download URL is available (DMG/PKG asset exists)
+        if not update_info.get('url'):
+            response = messagebox.askyesno(
+                "Manual Download Required",
+                f"Version {update_info['version']} is available but no installer was found.\n\n"
+                "This can happen due to GitHub rate limiting or if the release\n"
+                "doesn't have a DMG file attached yet.\n\n"
+                "Would you like to open the release page to download manually?"
+            )
+            if response:
+                webbrowser.open(update_info.get('release_url', f"https://github.com/{__github_repo__}/releases/latest"))
+            return
+
         if not skip_confirm:
             response = messagebox.askyesno(
                 "Download Update",
@@ -280,6 +294,20 @@ class GarminUploaderMac:
         def do_download():
             installer_path = UpdateChecker.download_update(update_info['url'], update_progress)
             progress_window.destroy()
+
+            # Validate the downloaded file is actually a DMG (not HTML error page)
+            if installer_path and installer_path.endswith('.dmg'):
+                file_size = os.path.getsize(installer_path) if os.path.exists(installer_path) else 0
+                if file_size < 1000000:  # Less than 1MB - probably not a valid DMG
+                    response = messagebox.askyesno(
+                        "Download Issue",
+                        f"The downloaded file appears to be invalid (only {file_size // 1024} KB).\n\n"
+                        "This can happen due to network issues or GitHub rate limiting.\n\n"
+                        "Would you like to open the release page to download manually?"
+                    )
+                    if response:
+                        webbrowser.open(update_info.get('release_url', f"https://github.com/{__github_repo__}/releases/latest"))
+                    return
 
             if installer_path and installer_path.endswith('.dmg'):
                 # Auto-install from DMG
@@ -395,13 +423,22 @@ class GarminUploaderMac:
                         f"Auto-install encountered an issue:\n{str(e)}\n\n"
                         f"The DMG has been opened. Please drag the app to Applications manually.")
             elif installer_path:
-                # Non-DMG file, open it
-                subprocess.run(['open', installer_path])
-                messagebox.showinfo("Download Complete",
-                    f"The installer has been downloaded and opened.\n\n"
-                    f"Please follow the installation instructions to update.")
+                # Non-DMG file was downloaded - this shouldn't happen but handle gracefully
+                response = messagebox.askyesno(
+                    "Unexpected File Type",
+                    f"The downloaded file is not a DMG installer.\n\n"
+                    "Would you like to open the release page to download manually?"
+                )
+                if response:
+                    webbrowser.open(update_info.get('release_url', f"https://github.com/{__github_repo__}/releases/latest"))
             else:
-                messagebox.showerror("Download Failed", "Could not download the update. Please try again.")
+                response = messagebox.askyesno(
+                    "Download Failed",
+                    "Could not download the update.\n\n"
+                    "Would you like to open the release page to download manually?"
+                )
+                if response:
+                    webbrowser.open(update_info.get('release_url', f"https://github.com/{__github_repo__}/releases/latest"))
 
         threading.Thread(target=do_download, daemon=True).start()
 
