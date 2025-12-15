@@ -1523,52 +1523,107 @@ You still need to drag them to OpenMTP."""
                padx=20, pady=8, relief=FLAT, cursor='hand2').pack(pady=(10, 0))
 
     def process_steps_for_preview(self, steps):
-        """Process flat steps list to detect repeat structures for hierarchical display"""
+        """Process flat steps list to detect repeat structures for hierarchical display.
+
+        Handles two patterns:
+        1. Explicit repeat: exercise → rest → repeat_marker
+        2. Exercise with sets > 1 property (followed by optional rest)
+        """
         processed = []
         i = 0
 
         while i < len(steps):
             step = steps[i]
 
+            # Skip repeat markers (they're metadata, not displayable steps)
+            if step.get('is_repeat', False):
+                i += 1
+                continue
+
+            # Skip standalone rest steps that aren't part of a group
+            if step.get('is_rest') or step.get('step_type') == 'rest':
+                # Check if this rest is followed by an exercise with sets
+                # If so, it will be handled with that exercise
+                if i + 1 < len(steps):
+                    next_step = steps[i + 1]
+                    if next_step.get('sets', 1) > 1:
+                        i += 1
+                        continue
+                # Standalone rest - add it
+                step_copy = step.copy()
+                step_copy['display_type'] = 'regular'
+                processed.append(step_copy)
+                i += 1
+                continue
+
             # Check if this step is followed by rest + repeat pattern
             if i + 2 < len(steps):
                 next_step = steps[i + 1]
                 after_next = steps[i + 2]
 
-                # Pattern: exercise -> rest -> repeat
                 is_rest = next_step.get('is_rest') or next_step.get('step_type') == 'rest'
                 is_repeat = after_next.get('is_repeat', False)
 
                 if is_rest and is_repeat:
                     repeat_count = after_next.get('repeat_count', 0) + 1
 
-                    # Create repeat header
                     processed.append({
                         'display_type': 'repeat_header',
                         'repeat_count': repeat_count,
                         'text': f"{repeat_count} Sets"
                     })
 
-                    # Add the exercise as nested
                     nested_step = step.copy()
                     nested_step['display_type'] = 'nested_exercise'
                     processed.append(nested_step)
 
-                    # Add the rest as nested
                     nested_rest = next_step.copy()
                     nested_rest['display_type'] = 'nested_rest'
                     processed.append(nested_rest)
 
-                    # Skip the repeat marker
                     i += 3
                     continue
 
-            # Check if step itself is a repeat marker (skip it)
-            if step.get('is_repeat', False):
+            # Check if exercise has sets > 1 (alternate grouping pattern)
+            sets = step.get('sets', 1)
+            if sets > 1:
+                # Create repeat header based on sets count
+                processed.append({
+                    'display_type': 'repeat_header',
+                    'repeat_count': sets,
+                    'text': f"{sets} Sets"
+                })
+
+                # Add exercise as nested
+                nested_step = step.copy()
+                nested_step['display_type'] = 'nested_exercise'
+                processed.append(nested_step)
+
+                # Check if next step is a rest - add it as nested
+                if i + 1 < len(steps):
+                    next_step = steps[i + 1]
+                    if next_step.get('is_rest') or next_step.get('step_type') == 'rest':
+                        nested_rest = next_step.copy()
+                        nested_rest['display_type'] = 'nested_rest'
+                        processed.append(nested_rest)
+                        i += 2
+                        continue
+
+                # No explicit rest step, but sets > 1 implies rest between sets
+                # Add implied "Lap Button" rest like Garmin Connect shows
+                processed.append({
+                    'display_type': 'nested_rest',
+                    'is_rest': True,
+                    'step_type': 'rest',
+                    'name': 'Rest',
+                    'duration_type': 'open',
+                    'rest_seconds': 0
+                })
+
                 i += 1
                 continue
 
-            # Regular step - add with display info
+            # Regular step (no sets, no repeat pattern)
             step_copy = step.copy()
             step_copy['display_type'] = 'regular'
             processed.append(step_copy)
