@@ -2605,18 +2605,27 @@ You still need to drag them to OpenMTP."""
 
     def browse_prg_file(self):
         """Open file dialog to select a .PRG file"""
-        initial_dir = str(self.prg_build_folder) if self.prg_build_folder.exists() else str(Path.home())
+        try:
+            initial_dir = str(self.prg_build_folder) if self.prg_build_folder.exists() else str(Path.home())
 
-        filepath = filedialog.askopenfilename(
-            title="Select Connect IQ App",
-            initialdir=initial_dir,
-            filetypes=[("Connect IQ Apps", "*.prg *.PRG"), ("All files", "*.*")]
-        )
+            # Force focus to root window before opening dialog
+            self.root.focus_force()
+            self.root.update()
 
-        if filepath:
-            self.selected_prg_file = Path(filepath)
-            self.prg_file_label.config(text=f"📦 {self.selected_prg_file.name}", fg='#333')
-            self.refresh_garmin_mount()
+            filepath = filedialog.askopenfilename(
+                parent=self.root,
+                title="Select Connect IQ App",
+                initialdir=initial_dir,
+                filetypes=[("Connect IQ Apps", "*.prg *.PRG"), ("All files", "*.*")]
+            )
+
+            if filepath:
+                self.selected_prg_file = Path(filepath)
+                self.prg_file_label.config(text=f"📦 {self.selected_prg_file.name}", fg='#333')
+                self.root.update()
+                self.refresh_garmin_mount()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to select file: {e}")
 
     def find_garmin_mount(self):
         """Find mounted Garmin device volume with GARMIN/APPS folder"""
