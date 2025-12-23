@@ -2677,13 +2677,52 @@ You still need to drag them to OpenMTP."""
                 self.install_prg_btn.config(state=NORMAL)
             else:
                 self.install_prg_btn.config(state=DISABLED)
+            # Hide MTP button if visible
+            if hasattr(self, 'mtp_install_btn'):
+                self.mtp_install_btn.pack_forget()
         else:
             self.garmin_mount = None
-            self.mount_status_label.config(
-                text="❌ No Garmin volume mounted (connect via USB Mass Storage)",
-                fg='#c62828'
-            )
-            self.install_prg_btn.config(state=DISABLED)
+            # Check if device is connected via MTP (detected in Step 3)
+            device = self.detect_garmin_device()
+            if device and device.get('connected'):
+                device_name = device.get('name', 'Garmin')
+                self.mount_status_label.config(
+                    text=f"⚠️ {device_name} connected via MTP - use OpenMTP to install",
+                    fg='#f57c00'
+                )
+                # Show OpenMTP button for manual install
+                if not hasattr(self, 'mtp_install_btn'):
+                    self.mtp_install_btn = Button(self.connectiq_frame, text="Open with OpenMTP",
+                                                   font=('SF Pro Text', 11),
+                                                   command=self._open_prg_with_openmtp,
+                                                   padx=10, pady=4, relief=FLAT, cursor='hand2')
+                self.mtp_install_btn.pack(anchor=W, pady=(8, 0))
+                self.install_prg_btn.config(state=DISABLED)
+            else:
+                self.mount_status_label.config(
+                    text="❌ No Garmin device detected",
+                    fg='#c62828'
+                )
+                if hasattr(self, 'mtp_install_btn'):
+                    self.mtp_install_btn.pack_forget()
+                self.install_prg_btn.config(state=DISABLED)
+
+    def _open_prg_with_openmtp(self):
+        """Open OpenMTP and the .prg file location for manual installation"""
+        if self.selected_prg_file and self.selected_prg_file.exists():
+            # Open the folder containing the .prg file
+            subprocess.run(['open', '-R', str(self.selected_prg_file)])
+        # Open OpenMTP
+        self.open_openmtp()
+        messagebox.showinfo(
+            "Manual Installation",
+            "Two windows opened:\n\n"
+            "1. Finder with your .prg file selected\n"
+            "2. OpenMTP\n\n"
+            "In OpenMTP, navigate to:\n"
+            "GARMIN → APPS\n\n"
+            "Then drag the .prg file from Finder to the APPS folder."
+        )
 
     def install_prg_file(self):
         """Install .PRG file to Garmin APPS folder"""
