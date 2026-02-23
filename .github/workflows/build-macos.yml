@@ -45,7 +45,7 @@ jobs:
         echo '' >> version.py
         echo "__version__ = \"${{ steps.get_version.outputs.VERSION }}\"" >> version.py
         echo "__app_name__ = \"Garmin Workout Uploader\"" >> version.py
-        echo "__github_repo__ = \"supergeri/garmin-usb-mac-app\"" >> version.py
+        echo "__github_repo__ = \"Amakaflow/garmin-usb-mac-app\"" >> version.py
 
     - name: Build with PyInstaller
       run: |
@@ -94,7 +94,7 @@ jobs:
              - Right-click on the app in Applications
              - Select "Open" from the menu
              - Click "Open" in the dialog
-             - See [full installation instructions](https://github.com/supergeri/garmin-usb-mac-app/blob/main/INSTALLATION.md#bypass-gatekeeper-required-for-unsigned-apps) for more options
+             - See [full installation instructions](https://github.com/Amakaflow/garmin-usb-mac-app/blob/main/INSTALLATION.md#bypass-gatekeeper-required-for-unsigned-apps) for more options
 
           ### Features
           - Upload FIT workout files to Garmin watches
